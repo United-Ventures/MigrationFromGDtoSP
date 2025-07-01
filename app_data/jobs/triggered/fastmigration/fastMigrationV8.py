@@ -91,6 +91,12 @@ MIGRATION_CSV  = "migration_report.csv"        # nome file di output
 FAILED_ROWS: List[Dict[str, str]] = []        # tentativi esauriti o errori gravi
 FAILED_CSV   = "failed_report.csv"
 
+# ---------- COLLISION HANDLING -------------------------------------------------
+used_tmp_names: set[str] = set()              # file già creati nel tmpdir
+used_sp_folders: set[tuple[str, str]] = set() # (parent_id, name) visti su SP
+coll_lock = threading.Lock()
+
+
 # ---------- UTILITY ------------------------------------------------------------------------------
 
 def load_cfg() -> dict:
@@ -111,6 +117,31 @@ def timed(section: str):
 
 def sanitize(name: str) -> str:
     return "".join(c for c in name if c not in "\\/:*?\"<>|").strip()
+
+def unique_tmp_name(f: dict) -> str:
+    """
+    Ritorna un nome sicuro per il tmpdir.
+    Aggiunge l'ID (8 char) solo se un altro file ha già lo stesso nome.
+    """
+    base = sanitize(f["name"])
+    with coll_lock:
+        if base in used_tmp_names:            # collisione già vista
+            base = f"{f['id'][:8]}_{base}"
+        used_tmp_names.add(base)
+    return base[:MAX_NAME_LEN]
+
+
+def unique_sp_folder_name(parent_id: str, name: str, g_id: str) -> str:
+    """
+    Evita collisioni di cartelle omonime sotto lo stesso parent su SharePoint.
+    Prefixa con i primi 8 char dell'ID Drive solo dalla **seconda** occorrenza.
+    """
+    key = (parent_id, name)
+    with coll_lock:
+        if key in used_sp_folders:            # esiste già
+            name = f"{g_id[:8]}_{name}"
+        used_sp_folders.add(key)
+    return name[:MAX_NAME_LEN]
 
 def flush_migration_report():
     """Scrive MIGRATION_ROWS su disco in formato CSV."""
@@ -391,7 +422,7 @@ def download_worker(dl_q: "queue.Queue", ul_q: "queue.Queue", tmpdir: str):
 
 def fetch_to_disk(f: dict, tmpdir: str) -> str:
     mime      = f["mimeType"]
-    safe_base = sanitize(f["name"])[:MAX_NAME_LEN]
+    safe_base = unique_tmp_name(f)
     drive     = get_drive()
 
     # MIME esclusi
@@ -485,10 +516,12 @@ def upload_worker(ul_q: queue.Queue, drive_id: str):
 @timed("walk")
 def dfs_collect_and_enqueue(g_id: str, sp_parent: str, sp_path: str,
                             drive_id: str, dl_q: "queue.Queue"):
-    name  = sanitize(
-        get_drive().files().get(fileId=g_id, fields="name", supportsAllDrives=True).execute()["name"]
+    name_raw = sanitize(
+    get_drive().files().get(fileId=g_id, fields="name", supportsAllDrives=True).execute()["name"]
     )
+    name = unique_sp_folder_name(sp_parent, name_raw, g_id)  
     sp_id = ensure_sp_folder(drive_id, sp_parent, name)
+
 
     new_sp_path = f"{sp_path}/{name}" if sp_path else name
     # ► registra la cartella
