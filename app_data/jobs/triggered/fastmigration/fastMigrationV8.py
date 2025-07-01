@@ -30,6 +30,7 @@ CHUNK_RETRIES  = 5     # tentativi per singolo chunk
 FILE_RETRIES   = 10     # tentativi per intero file (nuova funzionalità)
 LOG_FILE       = "fast_sync.log"
 MAX_NAME_LEN   = 120
+MIGRATION_JSON = "migration_report.json"
 
 # ---------- THROTTLING MS GRAPH -------------------------------------------------
 MAX_GRAPH_RPS = 15                 # massimo 10 richieste/sec complessive
@@ -171,6 +172,47 @@ def flush_failed_report():
     logger.warning("⚠︎ Salvato elenco fallimenti in %s (%d righe)",
                    FAILED_CSV, len(FAILED_ROWS))
 
+def flush_migration_json():
+    """
+    Converte MIGRATION_ROWS in un albero nidificato e lo salva in JSON.
+    Struttura:
+    {
+      "name": "<root>",
+      "type": "folder",
+      "children": [
+          { "name": "Sub1", "type": "folder", "children": [ ... ] },
+          { "name": "file.pdf", "type": "file", "g_id": "...", "mime": "application/pdf" }
+      ]
+    }
+    """
+    # costruiamo un indice path → nodo
+    root_node = {"name": "<root>", "type": "folder", "children": []}
+    path_index = {"": root_node}
+
+    for row in MIGRATION_ROWS:
+        path = row["sp_path"]          # es. "A/B/C" o "A/B/file.pdf"
+        parts = path.split("/")
+        parent_path = "/".join(parts[:-1])
+        parent = path_index[parent_path]
+
+        node = {
+            "name": parts[-1],
+            "type": "folder" if row["is_folder"] == "true" else "file",
+        }
+        if node["type"] == "file":
+            node.update(g_id=row["g_id"], mime=row["g_mimeType"])
+
+        parent["children"].append(node)
+
+        # se è cartella, registrala per i figli
+        if node["type"] == "folder":
+            node["children"] = []
+            path_index[path] = node
+
+    with open(MIGRATION_JSON, "w", encoding="utf-8") as f:
+        json.dump(root_node, f, indent=2, ensure_ascii=False)
+
+    logger.info("✔︎ Report JSON salvato in %s", MIGRATION_JSON)
 
 def _refill_token_bucket():
     """Thread daemon: inserisce un 'gettone' nel bucket ogni 1/MAX_GRAPH_RPS secondi."""
@@ -654,7 +696,9 @@ def main():
     report(tot)
 
     flush_migration_report()
+    flush_migration_json()      
     flush_failed_report()
+
 
 
     with open("failed_files.json", "w", encoding="utf-8") as f:
