@@ -62,7 +62,7 @@ class SDKInitializer(object):
         """
         token = OAuthToken(client_id='1000.FJQ9PFGDIELH4MUBZZ4S8MJXWQG5CI',
                            client_secret='9cc7e2978294e50948899b950ae0eb4d17d8c08fcb',
-                           token="1000.5672e68a9160294e463d6b6557b8270e.0bdfe352df6e8dc4cde43192a620607c",
+                           token="1000.0fb70552f828170db47aa35c022484ec.7cf1528f8622e3386bbcb546c8908dac",
                            token_type=TokenType.GRANT,
                            redirect_url='abs.com')
 
