@@ -74,25 +74,44 @@ def PerformQuery(queryInstructions):
                 print("Message: " + response_object.get_message().get_value())
 
 def SetRecordField(module, id, fName, value):
-    from zcrmsdk.src.com.zoho.crm.api.record import RecordOperations
-    from zcrmsdk.src.com.zoho.crm.api.record import BodyWrapper
-    # Get instance of RecordOperations Class
-    record_operations = RecordOperations()
-    # Get instance of BodyWrapper Class that will contain the request body
-    request = BodyWrapper()
-    # List to hold Record instances
-    records_list = []
-    # Get instance of Record Class
-    record = ZCRMRecord()
-    # Value to Record's fields
-    record.add_key_value(fName, value)
-    # Add Record instance to the list
-    records_list.append(record)
-    # Set the list to data in BodyWrapper instance
-    request.set_data(records_list)
-    response = record_operations.update_record(id, module, request)
+    from zcrmsdk.src.com.zoho.crm.api.record import (
+        RecordOperations,
+        BodyWrapper,
+        ActionWrapper,
+        APIException,
+        SuccessResponse
+    )
+    from zcrmsdk.src.com.zoho.crm.api.record import Record as ZCRMRecord
 
-    print(response.get_status_code())
+    record_operations = RecordOperations()
+    request = BodyWrapper()
+    records_list = []
+    record = ZCRMRecord()
+    record.add_key_value(fName, str(value))  # Forza stringa
+    records_list.append(record)
+    request.set_data(records_list)
+
+    response = record_operations.update_record(id, module, request)
+    print("Status Code:", response.get_status_code())
+
+    response_object = response.get_object()
+
+    if isinstance(response_object, ActionWrapper):
+        for action_response in response_object.get_data():
+            if isinstance(action_response, SuccessResponse):
+                print("✔️ Successo:", action_response.get_message().get_value())
+            elif isinstance(action_response, APIException):
+                print("❌ Errore API:")
+                print("Status:", action_response.get_status().get_value())
+                print("Code:", action_response.get_code().get_value())
+                print("Message:", action_response.get_message().get_value())
+                print("Details:", action_response.get_details())
+    elif isinstance(response_object, APIException):
+        print("❌ Errore globale:")
+        print("Status:", response_object.get_status().get_value())
+        print("Code:", response_object.get_code().get_value())
+        print("Message:", response_object.get_message().get_value())
+        print("Details:", response_object.get_details())
 
 #  ─── la funzione richiesta ────────────────────────────────────────────────────
 def log(msg: str):
@@ -189,5 +208,5 @@ def update_all_sids(csv_path: str, dry_run: bool = True):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    CSV_PATH = "migration_full.csv"
+    CSV_PATH = "migration_cleaned_paths.csv"
     update_all_sids(CSV_PATH, dry_run=False)

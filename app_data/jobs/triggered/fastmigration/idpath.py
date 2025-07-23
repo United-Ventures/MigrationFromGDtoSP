@@ -4,15 +4,16 @@
 make_migration_full.py
 ----------------------
 Converte migration_report.csv (generato dal migratore Drive ➜ SharePoint)
-in migration_full.csv, con colonne:
+in:
+    • migration_full.csv (con link completi)
+    • migration_paths_only.csv (con path leggibili)
+
+Entrambi con colonne:
     Google ID, SharePoint Path
 
 • Tiene solo le righe cartella (is_folder == "true")
-• Aggiunge sempre il prefisso  Deals/
-• Costruisce il link completo AllItems.aspx con parametro viewid fisso
-• Non deduplica: ogni Google ID rimane
-
-Esegui semplicemente:  python make_migration_full.py
+• Aggiunge sempre il prefisso Deals/
+• Costruisce il link AllItems.aspx con parametro viewid fisso
 """
 
 from pathlib import Path
@@ -27,23 +28,22 @@ LIBRARY     = "Shared Documents"
 DEALS_DIR   = "Deals"                     # sottocartella fissa
 VIEW_ID     = "07e6e92a-e871-4d62-9513-bf8f13cf1f00"
 
-SRC_CSV     = Path("migration_report.csv")   # input
-DST_CSV     = Path("migration_full.csv")     # output
+SRC_CSV     = Path("migration_report.csv")
+DST_LINKS   = Path("migration_full.csv")          # output con link
+DST_PATHS   = Path("migration_paths_only.csv")    # output con path leggibile
 # ------------------------------------------------------------------------------
 
 
 def build_sp_link(rel_folder: str) -> str:
-    """
-    Ritorna il link AllItems.aspx con id=... & viewid=...
-    dove rel_folder è il nome cartella (già con eventuale prefisso ID_)
-    """
-    # /sites/<Site>/Shared Documents/Deals/<Folder>
-    path_in_site = f"/sites/{SITE_NAME}/{LIBRARY}/{DEALS_DIR}/{rel_folder}".replace(" ", " ")
-    # encode TUTTO (anche gli /) → %2F...
+    """Ritorna il link AllItems.aspx con id=... & viewid=..."""
+    path_in_site = f"/sites/{SITE_NAME}/{LIBRARY}/{DEALS_DIR}/{rel_folder}"
     id_param = urllib.parse.quote(path_in_site, safe="")
-    # parte iniziale del link (Shared%20Documents già codificato per la UI)
     base = f"{DOMAIN}/sites/{SITE_NAME}/{LIBRARY.replace(' ', '%20')}"
     return f"{base}/Forms/AllItems.aspx?id={id_param}&viewid={VIEW_ID}"
+
+def build_clean_path(rel_folder: str) -> str:
+    """Ritorna solo il path leggibile, senza link"""
+    return f"/sites/{SITE_NAME}/{LIBRARY}/{DEALS_DIR}/{rel_folder}"
 
 
 def main() -> None:
@@ -56,17 +56,21 @@ def main() -> None:
     if folders.empty:
         sys.exit("⚠️  Nessuna riga cartella trovata nel report!")
 
-    # Costruisci percorso SharePoint
-    folders["SharePoint Path"] = folders["sp_path"].apply(build_sp_link)
-
-    # Rinominare la colonna g_id → Google ID
+    folders["SharePoint Link"] = folders["sp_path"].apply(build_sp_link)
+    folders["SharePoint Path"] = folders["sp_path"].apply(build_clean_path)
     folders.rename(columns={"g_id": "Google ID"}, inplace=True)
 
-    # Salva file finale
-    folders[["Google ID", "SharePoint Path"]].to_csv(
-        DST_CSV, index=False, encoding="utf-8"
+    # Salva con link
+    folders[["Google ID", "SharePoint Link"]].to_csv(
+        DST_LINKS, index=False, encoding="utf-8"
     )
-    print(f"✅  Creato {DST_CSV.resolve()} — {len(folders)} righe")
+    print(f"✅  Creato {DST_LINKS.resolve()} — {len(folders)} righe")
+
+    # Salva con path pulito
+    folders[["Google ID", "SharePoint Path"]].to_csv(
+        DST_PATHS, index=False, encoding="utf-8"
+    )
+    print(f"✅  Creato {DST_PATHS.resolve()} — {len(folders)} righe")
 
 
 if __name__ == "__main__":
