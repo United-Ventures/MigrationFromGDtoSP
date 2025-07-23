@@ -208,5 +208,5 @@ def update_all_sids(csv_path: str, dry_run: bool = True):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    CSV_PATH = "migration_cleaned_paths.csv"
+    CSV_PATH = "migration_paths_only.csv"
     update_all_sids(CSV_PATH, dry_run=False)
