@@ -25,12 +25,12 @@ import sys
 DOMAIN      = "https://unitedventuressgr.sharepoint.com"
 SITE_NAME   = "Etabeta-ERP"
 LIBRARY     = "Shared Documents"
-DEALS_DIR   = "Deals"                     # sottocartella fissa
+DEALS_DIR   = "Deals"
 VIEW_ID     = "07e6e92a-e871-4d62-9513-bf8f13cf1f00"
 
 SRC_CSV     = Path("migration_report.csv")
-DST_LINKS   = Path("migration_full.csv")          # output con link
-DST_PATHS   = Path("migration_paths_only.csv")    # output con path leggibile
+DST_LINKS   = Path("migration_full.csv")
+DST_PATHS   = Path("migration_paths_only.csv")
 # ------------------------------------------------------------------------------
 
 
@@ -56,9 +56,16 @@ def main() -> None:
     if folders.empty:
         sys.exit("⚠️  Nessuna riga cartella trovata nel report!")
 
+    # Scegli l'ID: se esiste e non è vuoto 'gdriveextension__Drive_Folder_ID', usalo; altrimenti usa 'g_id'
+    if "gdriveextension__Drive_Folder_ID" in folders.columns:
+        folders["Google ID"] = folders["gdriveextension__Drive_Folder_ID"].fillna("").where(
+            folders["gdriveextension__Drive_Folder_ID"].str.strip() != "", folders["g_id"]
+        )
+    else:
+        folders["Google ID"] = folders["g_id"]
+
     folders["SharePoint Link"] = folders["sp_path"].apply(build_sp_link)
     folders["SharePoint Path"] = folders["sp_path"].apply(build_clean_path)
-    folders.rename(columns={"g_id": "Google ID"}, inplace=True)
 
     # Salva con link
     folders[["Google ID", "SharePoint Link"]].to_csv(
