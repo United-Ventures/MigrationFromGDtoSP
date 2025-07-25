@@ -2,7 +2,6 @@
 """
 fast_migration_2025_merged.py — Google Drive ➔ SharePoint
 ========================================================
-
 Versione 2025‑06‑25‑merged
 --------------------------
 • Combina la scansione completa/paginata del secondo script con la velocità del primo.
@@ -22,6 +21,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.http import MediaIoBaseDownload
 
 # ---------- CONFIG -------------------------------------------------------------------------------
+
 CHUNK_DL       = 128 * 1024 * 1024  # 128 MB
 CHUNK_UL       = 200 * 1024 * 1024  # 240 MB – MS Graph raccomanda < 250 MB
 DL_THREADS     = 12
@@ -33,6 +33,7 @@ MAX_NAME_LEN   = 120
 MIGRATION_JSON = "migration_report.json"
 
 # ---------- THROTTLING MS GRAPH -------------------------------------------------
+
 MAX_GRAPH_RPS = 15                 # massimo 10 richieste/sec complessive
 _graph_token_bucket = queue.Queue(MAX_GRAPH_RPS)  # bucket con N "gettoni" al secondo
 
@@ -43,6 +44,7 @@ _graph_token  = None         # dict MSAL con expires_on (epoch)
 TOKEN_BUFFER  = 3600          # 5 minuti
 
 # ---------- EXPORT GOOGLE‐NATIVE -----------------------------------------------------------------
+
 EXPORT_MAP: Dict[str, Tuple[str, str]] = {
     "application/vnd.google-apps.document": (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"
@@ -66,6 +68,7 @@ SKIP_MIMES = {
 }
 
 # ---------- LOGGING -------------------------------------------------------------------------------
+
 LOG_LEVEL  = logging.DEBUG if os.getenv("FAST_MIG_VERBOSE") == "1" else logging.INFO
 LOG_FORMAT = "%(asctime)s [%(levelname)-8s] %(threadName)-15s — %(message)s"
 logging.basicConfig(
@@ -78,6 +81,7 @@ logger = logging.getLogger(__name__)
 logger.info("Logging inizializzato a livello %s", logging.getLevelName(LOG_LEVEL))
 
 # ---------- THREAD‑LOCAL, LOCK & STATS ------------------------------------------------------------
+
 tl = threading.local()
 lock = threading.Lock()
 TIMERS: Dict[str, float] = {"walk": 0.0, "download": 0.0, "upload": 0.0}
@@ -96,7 +100,6 @@ FAILED_CSV   = "failed_report.csv"
 used_tmp_names: set[str] = set()              # file già creati nel tmpdir
 used_sp_folders: set[tuple[str, str]] = set() # (parent_id, name) visti su SP
 coll_lock = threading.Lock()
-
 
 # ---------- UTILITY ------------------------------------------------------------------------------
 
@@ -130,7 +133,6 @@ def unique_tmp_name(f: dict) -> str:
             base = f"{f['id'][:8]}_{base}"
         used_tmp_names.add(base)
     return base[:MAX_NAME_LEN]
-
 
 def unique_sp_folder_name(parent_id: str, name: str, g_id: str) -> str:
     """
@@ -223,8 +225,8 @@ def _refill_token_bucket():
             pass
         time.sleep(1.0 / MAX_GRAPH_RPS)
 
-
 # ----- TOKEN MS GRAPH ---------------------------------------------------------------------------
+
 def _get_new_graph_token(cfg: dict):
     """Ottiene un nuovo access_token MS Graph (client-credentials flow)."""
     global _graph_app, _graph_token
@@ -306,6 +308,7 @@ def get_graph_session():
     return tl.graph
 
 # ---------- SHAREPOINT ---------------------------------------------------------------------------
+
 def ensure_sp_folder(drive_id: str, parent_id: str, name: str) -> str:
     """
     Ritorna l'ID della cartella (creata o già esistente) su SharePoint,
@@ -400,7 +403,6 @@ def put_chunk(url: str, chunk: bytes, hdr: dict):
         logger.debug("Chunk retry due to %s, sleep %ds", r.status_code, backoff)
         time.sleep(backoff)
 
-
 # ---------- FILE UPLOAD (NUOVA FUNZIONE) ---------------------------------------------------------
 
 def upload_file(path: str, sp_parent: str, drive_id: str):
@@ -460,7 +462,6 @@ def download_worker(dl_q: "queue.Queue", ul_q: "queue.Queue", tmpdir: str):
             })
         finally:
             dl_q.task_done()
-
 
 def fetch_to_disk(f: dict, tmpdir: str) -> str:
     mime      = f["mimeType"]
@@ -552,7 +553,6 @@ def upload_worker(ul_q: queue.Queue, drive_id: str):
 
         ul_q.task_done()
 
-
 # ---------- DFS WALK ---------------------------------------------------------------------------
 
 @timed("walk")
@@ -614,7 +614,6 @@ def dfs_collect_and_enqueue(g_id: str, sp_parent: str, sp_path: str,
         page = resp.get("nextPageToken")
         if not page:
             break
-
 
 # ---------- MAIN --------------------------------------------------------------------------------
 
@@ -704,7 +703,6 @@ def main():
     with open("failed_files.json", "w", encoding="utf-8") as f:
         json.dump(failed_files, f, indent=2, ensure_ascii=False)
 
-
 # ---------- REPORT -----------------------------------------------------------------------------
 
 def report(tot: float):
@@ -720,7 +718,6 @@ def report(tot: float):
     logger.info("Speed      : %.2f MB/s", (bytes_dl / 1024**2) / tot if tot else 0)
     logger.info("Avg/File   : %.2f s", tot / files_dl if files_dl else 0)
     logger.info("Throughput : %.2f files/min", (files_dl / tot) * 60 if tot else 0)
-
 
 if __name__ == "__main__":
     try:
